@@ -4,11 +4,13 @@ from binance_f.base.printobject import *
 from binance_f.model.constant import *
 from binance.client import Client
 import os
+from contextlib import redirect_stdout
 import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import mplfinance as mpf
+import datetime
 
 import graph
 
@@ -21,7 +23,7 @@ class Bot():
         self.client = Client(_api_key, _api_secret)
         self.margin = margin_type
         self.lev = levarage
-        self.position = False
+        self.position = self.get_specific_positon()
         self.active_position = False
         self.long = []
         self.short = []
@@ -31,10 +33,10 @@ class Bot():
         self.df = None
         self.timestamp = 0
         self.first_step = True
+        self.df_log_path = ""
 
         self.count = 0
 
-    # get the precision of the market, this is needed to avoid errors when creating orders
     def get_market_precision(self, _market="BTCUSDT"):
 
         market_data = self.req.get_exchange_information()
@@ -45,8 +47,8 @@ class Bot():
                 break
         return precision
 
-    # round the position size we can open to the precision of the market
     def round_to_precision(self, qty, precision):
+        # 注文を出すのに桁数合わせ
         new_qty = "{:0.0{}f}".format(qty , precision)
         return float(new_qty)
 
@@ -73,11 +75,13 @@ class Bot():
         return res
 
     def calc_qty(self, side):
+        # バイナンスの手数料,maker=0.04% taker=0.02%
         if side == 1:
             fee = 0.0004
         elif side == -1:
             fee = 0.0002
 
+        # 現在の価格とウォレットから注文に必要なbtc量を計算(手数料いらんかも)
         price = self.get_mark_price()
         balance = self.get_futures_balance()
         print('balance : ',balance)
@@ -87,15 +91,19 @@ class Bot():
         return qty
 
     def initialize_futures(self, levarage, margin_type):
+        # レバレッジとマージンタイプを変える
         print("initialize futures")
         self.change_levarage(levarage)
         self.change_margin_type(margin_type)
 
     def get_positions(self):
-        positions = self.req.get_position_v2()
+        # 今のポジションを全て取ってくる
+        with redirect_stdout(open(os.devnull, 'w')):
+            positions = self.req.get_position_v2()
         return positions
 
     def get_specific_positon(self, _market="BTCUSDT"):
+        # BTCUSDT市場で持ってるポジションをとる
         positions = self.get_positions()
         for position in positions:
             if position.symbol == _market:
@@ -103,20 +111,23 @@ class Bot():
         return position
     
     def check_in_position(self, _market="BTCUSDT"):
-        position = self.get_specific_positon(_market)
+        # 市場のポジションを持ってるか確認、確認した時にself.positionを最新に更新
+        self.position = self.get_specific_positon(_market)
 
         in_position = False
 
-        if float(position.positionAmt) != 0.0:
+        if float(self.position.positionAmt) != 0.0:
             in_position = True
 
         return in_position
 
     def get_mark_price(self):
+        # 現在のBTC価格
         price = self.req.get_symbol_price_ticker(self.symbol)
         return price[0].price
 
     def get_futures_balance(self, _asset = "USDT"):
+        # ウォレットにあるUSDTを取ってくる
         balances = self.req.get_balance()
         asset_balance = 0
         for balance in balances:
@@ -126,6 +137,7 @@ class Bot():
         return asset_balance
 
     def get_ohlcv(self, interval, limit):
+        # ローソク足を直近からlimitの数だけ取ってくる
         candles = self.req.get_candlestick_data(symbol=self.symbol, interval=interval,limit=limit)
         return candles
 
@@ -169,11 +181,15 @@ class Bot():
         mpf.plot(df[len(df.index)-50:len(df.index)], addplot=ema,type='candle', figratio=(12,4), savefig="bot_test.png",volume=True)
     
     def tograph_mpl(self,df):
+        # matplotでグラフ表示
         fig = plt.figure(figsize=(9,6))
         ax = fig.add_subplot(111)
         df['datetime'] = pd.to_datetime(df['Open Time'].astype(int)/1000, unit="s")
         df=df.set_index("datetime")
-        graph.ohlcv_plot(ax,df[len(df.index)-50:len(df.index)]) # 全部描画すると小さくなって見にくいので一部だけ
+        #　現在の足から50前まで表示
+        graph.ohlcv_plot(ax,df[len(df.index)-50:len(df.index)])
+
+        # longとshortのマーカーをつける
         if len(self.long) > 0:
             for i in self.long:
                 df.loc[df.index[i],['Long']] = 1.0
@@ -183,14 +199,18 @@ class Bot():
                 df.loc[df.index[i],['Short']] = 1.0
         ax.scatter(df.index, df["Short"].mask(df['Short'] == 1.0, df['High']+20),marker="v",color="b",label="short")
         ax.legend()
+
         plt.savefig('candle_mpl.png')
+        self.save_df(df)
 
     def add_ema(self, df, n):
+        # emaをデータフレーム入れて返す
         c_name = "ema"+str(n)
         df[c_name] = df["Close"].ewm(span=n).mean()
         return df
 
     def construct_df(self,limit):
+        # ohlcv+αのデータフレームを作成
         candles = self.get_ohlcv(CandlestickInterval.MIN1, limit)
         self.timestamp = candles[-1].closeTime
         ot,o,h,l,c,v,ct = self.convert_candle(candles)
@@ -200,6 +220,7 @@ class Bot():
     def open_position(self, side, test=True):
         if not test:
             # 1回目のopen orderのためにprev_positionをsideと逆に設定する
+            # TODO: 改善
             if self.active_position == False:
                 if side == 1:
                     self.prev_position = -1
@@ -219,12 +240,15 @@ class Bot():
                 self.active_position = True
                 self.prev_position = 1
                 self.save_position(side)
+                self.position = self.get_specific_positon()
+
             elif side == -1 and self.prev_position == 1:
                 res = self.order(side='SELL', qty=qty)
                 print("OPEN SHORT")
                 self.active_position = True
                 self.prev_position = -1
                 self.save_position(side)
+                self.position = self.get_specific_positon()
             else:
                 pass
         # test用
@@ -251,16 +275,23 @@ class Bot():
 
     def close_position(self, side, test=True):
         if not test:
+            # positionから量を計算させる
+            amt = self.position.positionAmt
+            amt = float(amt)
+            # ショートのポジションは反転してるので直す
+            if amt < 0:
+                amd = -amt
+            precision = self.get_market_precision()
+            amt = self.round_to_precision(amt,precision)
             qty = self.qty
             self.qty = 0
-            # side で見るとlong を持っててclose short してしまう
             # side + prev_side を見ることでemaのゴールデンクロスが変わったところでpositionを抜ける
             if side == 1 and self.prev_position == -1:
-                res = self.order(side='BUY', qty=qty)
+                res = self.order(side='BUY', qty=amt)
                 print("CLOSE SHORT")
                 self.active_position = False
             elif side == -1 and self.prev_position == 1:
-                res = self.order(side='SELL', qty=qty)
+                res = self.order(side='SELL', qty=amt)
                 print("CLOSE LONG")
                 self.active_position = False
             else:
@@ -270,8 +301,9 @@ class Bot():
             if self.active_position == False:
                 in_position = self.check_in_position()
                 if in_position:
-                    self.req.cancel_all_orders(self.symbol)
-                    raise Exception
+                    print("close error : position amt ", self.position.positionAmt)
+                    print("close error : position amt ", self.position.positionAmt)
+                    print("close error : position amt ", self.position.positionAmt)
         # test用
         else:
             if side == 1 and self.prev_position == -1:
@@ -284,6 +316,7 @@ class Bot():
                 pass
     
     def save_position(self, side):
+        # log保存用
         if side == 1:
             order_side = "LONG"
             self.long.append(self.df.index[-1])
@@ -292,10 +325,15 @@ class Bot():
             self.short.append(self.df.index[-1])
 
     def excute(self):
+        # TODO: botの停止処理
+        # TODO: 利益率を出す → calc_profit_and_loss
+        # TODO: botのログを残すようにする → save_df 
+        # TODO: 初回エントリーをクロスでエントリーさせるようにする
+        # TODO: 損失の許容範囲と損切り(暴落対策) 
+        # TODO: レンジ相場の場合無駄にエントリーさせない
         test = False
         # policyに従ってorder side決定(side=1:LONG side=-1:SHORT side=0:NOOP)
         side = self.policy()
-        print(self.df.index[-1])
 
         # 次の足までの残り時間
         time_res = self.client.get_server_time()
@@ -312,9 +350,9 @@ class Bot():
                 self.close_position(side,test)
                 self.open_position(side,test)
 
+    def policy(self):
     # ema(2)とema(5)のゴールデンクロス
     # ema(2)>ema(5)でLONG,ema(2)<ema(5)でSHORT
-    def policy(self):
         side = 0
         #　最初の実行時は100のohlcvをとる
         if self.first_step:
@@ -323,6 +361,7 @@ class Bot():
             # long と　shortを追加
             self.df["Long"] = pd.Series()
             self.df["Short"] = pd.Series()
+            self.initialize_log_name()
             self.first_step = False
         else:
             df = self.construct_df(limit=2)
@@ -349,13 +388,24 @@ class Bot():
         self.tograph_mpl(self.df)
         return side
 
+    def  initialize_log_name(self):
+        # savedfで使用するログのパスを作る
+            dt_now = datetime.datetime.now()
+            log_dir = 'df_log/'
+            file_name = dt_now.strftime('%Y-%m-%d_%H:%M:%S')
+            self.df_log_path = log_dir + file_name + '.csv'
+    
+    def save_df(self, df):
+        # logで溜め込んだohlcvデータをcsvにする
+        df.to_csv(self.df_log_path)
+
+    def calc_profit_and_loss(self):
+        # TODO: エントリーした価格を知ってる必要がある post orderからの返り値で見れるか？ → positionからentrypriceで見れる
+        pass
+
 
 if __name__ == "__main__":
-    # 100キャンドルもらってemaを作って描画
     bot = Bot(symbol='BTCUSDT',margin_type='CROSSED',levarage=20)
     while True:
         bot.excute()
-            #in_position = bot.check_in_position
-            #if in_position:
-            #    bot.req.cancel_all_orders(bot.symbol)
         time.sleep(1)
