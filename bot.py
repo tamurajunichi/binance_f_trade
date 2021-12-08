@@ -8,10 +8,11 @@ from contextlib import redirect_stdout
 import time
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import mplfinance as mpf
 import datetime
 
+import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 import graph
 
 _api_key = os.environ.get('BINANCE_API_KEY')
@@ -21,19 +22,20 @@ class Bot():
     def __init__(self,symbol,margin_type,levarage):
         self.req = RequestClient(api_key=_api_key, secret_key=_api_secret, url='https://fapi.binance.com')
         self.client = Client(_api_key, _api_secret)
+        self.symbol = symbol
         self.margin = margin_type
         self.lev = levarage
         self.position = self.get_specific_positon()
         self.active_position = False
+        self.order_side = 0
         self.long = []
         self.short = []
-        self.symbol = symbol
-        self.qty = 0
         self.initialize_futures(levarage=self.lev, margin_type=self.margin)
         self.df = None
         self.timestamp = 0
         self.first_step = True
         self.df_log_path = ""
+        self.profit = 0
 
         self.count = 0
 
@@ -82,7 +84,7 @@ class Bot():
             fee = 0.0002
 
         # 現在の価格とウォレットから注文に必要なbtc量を計算(手数料いらんかも)
-        price = self.get_mark_price()
+        price = self.get_symbol_price()
         balance = self.get_futures_balance()
         print('balance : ',balance)
         qty = (balance * self.lev) / price
@@ -102,17 +104,17 @@ class Bot():
             positions = self.req.get_position_v2()
         return positions
 
-    def get_specific_positon(self, _market="BTCUSDT"):
+    def get_specific_positon(self):
         # BTCUSDT市場で持ってるポジションをとる
         positions = self.get_positions()
         for position in positions:
-            if position.symbol == _market:
+            if position.symbol == self.symbol:
                 break
         return position
     
-    def check_in_position(self, _market="BTCUSDT"):
+    def check_in_position(self):
         # 市場のポジションを持ってるか確認、確認した時にself.positionを最新に更新
-        self.position = self.get_specific_positon(_market)
+        self.position = self.get_specific_positon()
 
         in_position = False
 
@@ -122,6 +124,11 @@ class Bot():
         return in_position
 
     def get_mark_price(self):
+        # 現在のBTCのマーク価格
+        price = self.req.get_mark_price(self.symbol)
+        return price[0].price
+
+    def get_symbol_price(self):
         # 現在のBTC価格
         price = self.req.get_symbol_price_ticker(self.symbol)
         return price[0].price
@@ -182,24 +189,32 @@ class Bot():
     
     def tograph_mpl(self,df):
         # matplotでグラフ表示
-        fig = plt.figure(figsize=(9,6))
-        ax = fig.add_subplot(111)
+        fig = plt.figure(figsize=(10,8))
+        gs_master = GridSpec(nrows=4, ncols=2, height_ratios=[1,1,1,1])
+        gs_1 = GridSpecFromSubplotSpec(nrows=3, ncols=1, subplot_spec=gs_master[0:3, :])
+        ax_1 = fig.add_subplot(gs_1[:,:])
+        gs_2 = GridSpecFromSubplotSpec(nrows=1, ncols=1, subplot_spec=gs_master[3, :])
+        ax_2 = fig.add_subplot(gs_2[:,:])
+
+        # timestampからdatetimeを作りindexにする。datetimeは日本時間を指定。
         df['datetime'] = pd.to_datetime(df['Open Time'].astype(int)/1000, unit="s")
         df=df.set_index("datetime")
+        df=df.tz_localize('utc').tz_convert('Asia/Tokyo')
         #　現在の足から50前まで表示
-        graph.ohlcv_plot(ax,df[len(df.index)-50:len(df.index)])
+        graph.ohlcv_plot(ax_1,df[len(df.index)-50:len(df.index)])
 
         # longとshortのマーカーをつける
         if len(self.long) > 0:
             for i in self.long:
                 df.loc[df.index[i],['Long']] = 1.0
-        ax.scatter(df.index, df["Long"].mask(df['Long'] == 1.0, df['Low']-20),marker="^",color="r",label="long")
+        ax_1.scatter(df.index, df["Long"].mask(df['Long'] == 1.0, df['Low']-20),marker="^",color="r",label="long")
         if len(self.short) > 0:
             for i in self.short:
                 df.loc[df.index[i],['Short']] = 1.0
-        ax.scatter(df.index, df["Short"].mask(df['Short'] == 1.0, df['High']+20),marker="v",color="b",label="short")
-        ax.legend()
-
+        ax_1.scatter(df.index, df["Short"].mask(df['Short'] == 1.0, df['High']+20),marker="v",color="b",label="short")
+        ax_1.legend()
+       
+        ax_2.plot(df.index, df["Profit"], color = "y")
         plt.savefig('candle_mpl.png')
         self.save_df(df)
 
@@ -233,7 +248,6 @@ class Bot():
             qty = qty * 0.8
             precision = self.get_market_precision()
             qty = self.round_to_precision(qty,precision)
-            self.qty = qty
             if side == 1 and self.prev_position == -1:
                 res = self.order(side='BUY', qty=qty)
                 print("OPEN LONG")
@@ -241,6 +255,7 @@ class Bot():
                 self.prev_position = 1
                 self.save_position(side)
                 self.position = self.get_specific_positon()
+                self.oder_side = side
 
             elif side == -1 and self.prev_position == 1:
                 res = self.order(side='SELL', qty=qty)
@@ -249,6 +264,7 @@ class Bot():
                 self.prev_position = -1
                 self.save_position(side)
                 self.position = self.get_specific_positon()
+                self.oder_side = side
             else:
                 pass
         # test用
@@ -275,25 +291,27 @@ class Bot():
 
     def close_position(self, side, test=True):
         if not test:
-            # positionから量を計算させる
+            # positionからqtyを計算
             amt = self.position.positionAmt
-            amt = float(amt)
+            amt = abs(float(amt))
             # ショートのポジションは反転してるので直す
-            if amt < 0:
-                amd = -amt
             precision = self.get_market_precision()
             amt = self.round_to_precision(amt,precision)
-            qty = self.qty
-            self.qty = 0
+
+            profit = 0
             # side + prev_side を見ることでemaのゴールデンクロスが変わったところでpositionを抜ける
             if side == 1 and self.prev_position == -1:
                 res = self.order(side='BUY', qty=amt)
                 print("CLOSE SHORT")
                 self.active_position = False
+                self.calc_profit()
+                self.order_side = 0
             elif side == -1 and self.prev_position == 1:
                 res = self.order(side='SELL', qty=amt)
                 print("CLOSE LONG")
                 self.active_position = False
+                self.calc_profit()
+                self.order_side = 0
             else:
                 pass
 
@@ -301,8 +319,6 @@ class Bot():
             if self.active_position == False:
                 in_position = self.check_in_position()
                 if in_position:
-                    print("close error : position amt ", self.position.positionAmt)
-                    print("close error : position amt ", self.position.positionAmt)
                     print("close error : position amt ", self.position.positionAmt)
         # test用
         else:
@@ -326,14 +342,14 @@ class Bot():
 
     def excute(self):
         # TODO: botの停止処理
-        # TODO: 利益率を出す → calc_profit_and_loss
-        # TODO: botのログを残すようにする → save_df 
         # TODO: 初回エントリーをクロスでエントリーさせるようにする
         # TODO: 損失の許容範囲と損切り(暴落対策) 
         # TODO: レンジ相場の場合無駄にエントリーさせない
+        # TODO: 利益率を出す → calc_profit
+        # TODO: botのログを残すようにする → save_df 
         test = False
         # policyに従ってorder side決定(side=1:LONG side=-1:SHORT side=0:NOOP)
-        side = self.policy()
+        signal = self.policy()
 
         # 次の足までの残り時間
         time_res = self.client.get_server_time()
@@ -344,16 +360,16 @@ class Bot():
         if wait_time < 0:
             # 初回のposition
             if self.active_position == False:
-                self.open_position(side,test)
+                self.open_position(signal,test)
             # 2回目以降　positionを精算後に逆のpositionを持つ
             else:
-                self.close_position(side,test)
-                self.open_position(side,test)
+                self.close_position(signal,test)
+                self.open_position(signal,test)
 
     def policy(self):
     # ema(2)とema(5)のゴールデンクロス
     # ema(2)>ema(5)でLONG,ema(2)<ema(5)でSHORT
-        side = 0
+        signal = 0
         #　最初の実行時は100のohlcvをとる
         if self.first_step:
             df = self.construct_df(limit=100)
@@ -361,6 +377,7 @@ class Bot():
             # long と　shortを追加
             self.df["Long"] = pd.Series()
             self.df["Short"] = pd.Series()
+            self.df["Profit"] = 0
             self.initialize_log_name()
             self.first_step = False
         else:
@@ -378,15 +395,15 @@ class Bot():
         ema7 = self.df.loc[self.df.index[-1],["ema7"]][0]
         # long
         if ema3 > ema7:
-            side = 1
+            signal = 1
         # short
         elif ema3 < ema7:
-            side = -1
+            signal = -1
 
         # グラフの出力
         #self.tograph(self.df)
         self.tograph_mpl(self.df)
-        return side
+        return signal
 
     def  initialize_log_name(self):
         # savedfで使用するログのパスを作る
@@ -399,9 +416,28 @@ class Bot():
         # logで溜め込んだohlcvデータをcsvにする
         df.to_csv(self.df_log_path)
 
-    def calc_profit_and_loss(self):
-        # TODO: エントリーした価格を知ってる必要がある post orderからの返り値で見れるか？ → positionからentrypriceで見れる
-        pass
+    def calc_profit(self):
+        # ポジション終了時の損益の計算　closeする時に呼び出す
+        entry_price = float(self.position.entryPrice)
+        exit_price = float(self.get_symbol_price())
+        qty = self.position.positionAmt
+        qty = abs(float(qty))
+        profit = ((1/entry_price)-(1/exit_price))*(entry_price*qty*self.oder_side)
+        # usdtへ変換 
+        profit = profit * exit_price
+        self.profit += profit
+        # 最新の足が完成するため-2
+        self.df.loc[self.df.index[-2], ['Profit']]
+
+    def calc_upnl(self):
+        # マーク価格：先物の評価価格
+        # インデックス価格：取引所間の現物の平均
+        # uPNL:マーク価格利用した未実現損益
+        if self.check_in_position:
+            upnl = self.position.unRealizedProfit
+        else:
+            upnl = None
+        return upnl
 
 
 if __name__ == "__main__":

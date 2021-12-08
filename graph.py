@@ -9,10 +9,6 @@ def ohlcv_plot(ax,df):
     :param ax:ローソク足を描画するAxesオブジェクト.
     :param df:DataFrameオブジェクト. 必要なカラムはtimestamp,open,high,low,close,volume.
     """
-    # timestampからdatetimeを作りindexにする。datetimeは日本時間を指定。
-    df['datetime'] = pd.to_datetime(df['Open Time'].astype(int)/1000, unit="s")
-    df=df.set_index("datetime")
-    #df=df.tz_localize('utc').tz_convert('Asia/Tokyo')
 
     # ローソク足の幅を設定
     # matplotlib上でwidth=1->1日となるのでローソク足の時間軸に応じて幅を設定
