@@ -2,6 +2,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import dates as mdates
 import numpy as np
+from contextlib import redirect_stdout
+import os
 
 def ohlcv_plot(ax,df):
     """
@@ -22,8 +24,9 @@ def ohlcv_plot(ax,df):
     idx0=df.index[df["Close"]<df["Open"]]
 
     # 実体
-    df["body"]=df["Close"]-df["Open"]
-    df["body"]=df["body"].abs()
+    with redirect_stdout(open(os.devnull, 'w')):
+        df["body"]=df["Close"]-df["Open"]
+        df["body"]=df["body"].abs()
     ax.bar(idx1,df.loc[idx1,"body"],width=w * (1-0.2),bottom=df.loc[idx1,"Open"],linewidth=1,color="#33b066",zorder=2)
     ax.bar(idx0,df.loc[idx0,"body"],width=w * (1-0.2),bottom=df.loc[idx0,"Close"],linewidth=1,color="#ff5050",zorder=2)
 
