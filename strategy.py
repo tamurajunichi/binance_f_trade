@@ -4,10 +4,10 @@ import pandas as pd
 
 class GoldenCross(object):
     def __init__(self) -> None:
-        self.first_step = True
         self.df = None
 
-    def add_ema(self, df, n):
+    @staticmethod
+    def add_ema(df, n):
         # emaをデータフレーム入れて返す
         c_name = "ema"+str(n)
         df[c_name] = df["Close"].ewm(span=n).mean()

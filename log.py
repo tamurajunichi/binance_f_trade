@@ -4,6 +4,7 @@ import mplfinance as mpf
 import pandas as pd
 import datetime
 import graph
+from strategy import GoldenCross
 
 class Logger(object):
     def __init__(self) -> None:
@@ -12,7 +13,9 @@ class Logger(object):
         self.initialize_log_name()
         self.long = []
         self.short = []
+
         self.profit = []
+        self.pnl = 0
 
     def save_position_side(self, signal, df):
         # log保存用
@@ -21,8 +24,11 @@ class Logger(object):
         elif signal == -1:
             self.short.append(df.loc[df.index[-1],["Close Time"]])
 
-    def save_profit(self, df, profit):
+    def save_upnl(self, df, profit):
         self.profit.append([df.loc[df.index[-1], ["Close Time"]], profit])
+
+    def save_pnl(self, pnl):
+        self.pnl += pnl
 
     def tograph(self,df):
         ema_df = df[["ema3","ema7"]]
@@ -34,7 +40,12 @@ class Logger(object):
         df = df[["Open","High", "Low", "Close", "Volume"]]
         mpf.plot(df[len(df.index)-50:len(df.index)], addplot=ema,type='candle', figratio=(12,4), savefig="bot_test.png",volume=True)
     
-    def tograph_mpl(self,df):
+    def tograph_mpl(self,df,signal):
+        # emaを算出してdfに付け足す
+        if signal == 0:
+            df = GoldenCross.add_ema(df,3)
+            df = GoldenCross.add_ema(df,7)
+
         # matplotでグラフ表示
         fig = plt.figure(figsize=(10,8))
         gs_master = GridSpec(nrows=4, ncols=2, height_ratios=[1,1,1,1])
@@ -66,12 +77,12 @@ class Logger(object):
         ax_1.legend()
 
         df["Profit"] = 0
-        if len(self.profit) > 0:
-            for i,p in zip(self.profit):
-                l = df.index[df['Close Time'] == i[0]].tolist()
-                df.loc[df.index[df.index.get_loc(l[0])], ["Profit"]] = p
-            ax_2.plot(df.index, df["Profit"], color = "y")
+        for i in self.profit:
+            l = df.index[df['Close Time'] == i[0][0]].tolist()
+            df.loc[df.index[df.index.get_loc(l[0])], ["Profit"]] = self.pnl+i[1]
+        ax_2.plot(df.index, df["Profit"], color = "y")
         plt.savefig('candle_mpl.png')
+        plt.close()
         self.save_df(df)
 
     def  initialize_log_name(self):

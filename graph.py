@@ -12,6 +12,9 @@ def ohlcv_plot(ax,df):
     :param df:DataFrameオブジェクト. 必要なカラムはtimestamp,open,high,low,close,volume.
     """
 
+    # warning出さないようにcopyする
+    df = df.copy()
+
     # ローソク足の幅を設定
     # matplotlib上でwidth=1->1日となるのでローソク足の時間軸に応じて幅を設定
     time_span=df["Open Time"].diff()[1]
@@ -24,9 +27,8 @@ def ohlcv_plot(ax,df):
     idx0=df.index[df["Close"]<df["Open"]]
 
     # 実体
-    with redirect_stdout(open(os.devnull, 'w')):
-        df["body"]=df["Close"]-df["Open"]
-        df["body"]=df["body"].abs()
+    df["body"]=df["Close"]-df["Open"]
+    df["body"]=df["body"].abs()
     ax.bar(idx1,df.loc[idx1,"body"],width=w * (1-0.2),bottom=df.loc[idx1,"Open"],linewidth=1,color="#33b066",zorder=2)
     ax.bar(idx0,df.loc[idx0,"body"],width=w * (1-0.2),bottom=df.loc[idx0,"Close"],linewidth=1,color="#ff5050",zorder=2)
 

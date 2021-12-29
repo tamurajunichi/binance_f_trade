@@ -9,6 +9,7 @@ from binance.client import Client
 
 import os
 import pandas as pd
+from datetime import datetime
 
 # バイナンス先物取引のインターフェースクラス
 # binance_f -> interface.py -> info
@@ -17,8 +18,10 @@ class BinanceInterface(object):
         _api_key = os.environ.get('BINANCE_API_KEY')
         _api_secret = os.environ.get('BINANCE_API_SECRET')
         self.req = RequestClient(api_key=_api_key, secret_key=_api_secret, url='https://fapi.binance.com')
-        self.client = Client(_api_key, _api_secret)
+        #self.client = Client(_api_key, _api_secret)
         self.symbol = symbol
+        # api呼び出し回数
+        self.count = 0
 
     def _get_market_precision(self):
         # オーダーに必要な桁数をもらう
@@ -152,7 +155,30 @@ class BinanceInterface(object):
                 break
         return asset_balance
 
+    def get_time(self):
+        with redirect_stdout(open(os.devnull, 'w')):
+            time = self.req.get_servertime()
+        return time
+
+    def get_all_orders(self):
+        with redirect_stdout(open(os.devnull, 'w')):
+            orders =  self.req.get_all_orders(self.symbol)
+        return orders   
+
+    def get_order(self, id):
+        #with redirect_stdout(open(os.devnull, 'w')):
+        order = self.req.get_order(self.symbol,id)
+        return order 
+
+# TODO: バックテスト用のインターフェース
+class BacktestInterface(object):
+    pass
+
 if __name__ == "__main__":
     bi = BinanceInterface("BTCUSDT")
-    price = bi.get_mark_price()
-    print(price)
+    res = bi.order(qty=0.001)
+    print(res.orderId)
+    o = bi.get_all_orders()
+    o= bi.get_order(o[-1].orderId)
+    print(o.avgPrice)
+    print(datetime.fromtimestamp(o.updateTime/1000))
