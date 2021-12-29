@@ -91,6 +91,7 @@ class Manager(object):
     def close_position(self, pos, signal, risk, interface):
         qty = float(pos.positionAmt)
         activate = True
+        pnl = None
         if qty != 0.0:
             # riskの時
             # open position -> buy or sell -> self.posside -> risk on -> close position
@@ -116,7 +117,8 @@ class Manager(object):
                 pnl = self.calc_pnl(qty, avg_price)
             else:
                 pnl = None
-            return activate, pnl
+            print(activate, pnl)
+        return activate, pnl
 
     def check_order(self, interface, orderid):
         order_info = interface.get_order(orderid)
