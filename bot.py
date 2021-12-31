@@ -28,7 +28,7 @@ class Bot():
         self.interface.change_margin_type(margin_type)
 
         self.active_position = False
-        self.timestamp = 0
+        self.preinterval = 0
         self.profit = 0
         self.firststep = True
     
@@ -40,10 +40,8 @@ class Bot():
         # TODO: レンジ相場の場合無駄にエントリーさせない
         # 1分足のohlcvを読み取り
         df = self.interface.get_ohlcv_df(interval=CandlestickInterval.MIN1, limit=100)
-        print("終値:",df.loc[df.index[-1], ["Close"]][0])
-        if self.firststep:
-            self.timestamp = df.loc[df.index[-1],["Close Time"]][0]
-            self.firststep = False
+        close = df.loc[df.index[-1],["Close"]][0]
+        curinterval = df.loc[df.index[-1],["Close Time"]][0]
 
         # position持ってればリスクと損益計算
         if self.interface.check_in_position():
@@ -57,23 +55,24 @@ class Bot():
 
         # 次の足までの残り時間
         server_time = self.interface.get_time()
-        print(datetime.fromtimestamp(server_time/1000))
+        print("時刻：%s, 終値：%s, cpnl：%s"%(datetime.fromtimestamp(server_time/1000),close,self.logger.pnl))
 
         # 足が決まってからsignalを見る
         signal = 0
-        if self.timestamp+3000 < server_time:
+        if self.preinterval != curinterval:
             # policyに従ってsignal決定(signal=1:LONG signal=-1:SHORT signal=0:NOOP)
             signal, df = self.strategy.get_signal(df)
             print("signal:",signal)
             # ポジション持ってる場合
             if self.active_position:
                 self.close(signal, False)
+                time.sleep(0.5)
                 self.open(signal)
             # 持ってない場合
             else:
                 self.open(signal)
             self.logger.save_position_side(signal, df)
-            self.timestamp += 60000
+            self.preinterval = curinterval
         self.logger.tograph_mpl(df, signal)
     
     def open(self, signal):
@@ -84,8 +83,7 @@ class Bot():
     def close(self, signal, risk):
         pos = self.interface.get_specific_positon()
         self.active_position, pnl = self.manager.close_position(pos, signal, risk, self.interface)
-        if not pnl is None:
-            self.logger.save_pnl(pnl)
+        self.logger.save_pnl(pnl)
 
     def save_log(self):
         print("output logging...")
@@ -97,11 +95,15 @@ def main():
     try:
         while True:
             bot.excute()
-            time.sleep(1)
+            time.sleep(0.5)
     except KeyboardInterrupt:
         print("KeyboardInterrupt")
         bot.save_log()
         exit()
+    except ConnectionError:
+        pass
+    finally:
+        pass
 
 if __name__ == "__main__":
     main()

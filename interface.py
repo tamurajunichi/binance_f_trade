@@ -46,6 +46,7 @@ class BinanceInterface(object):
 
     def order(self, type='MARKET', side='BUY', position_side='BOTH', qty=1.0):
         with redirect_stdout(open(os.devnull, 'w')):
+            qty = abs(qty)
             qty = self._convert_qty(qty)
             res = self.req.post_order(
                 symbol=self.symbol,

@@ -41,6 +41,7 @@ class Manager(object):
 
     @staticmethod
     def _pnl(qty, entry, lev, close):
+        # pnlとroeの計算
         imr = 1/lev
         initial_margin = qty * entry * imr
         pnl = (close - entry) * qty
@@ -48,9 +49,12 @@ class Manager(object):
         return pnl, roe
 
     def calc_upnl(self, pos):
+        # upnlの計算
+        # 計算に必要なものをポジション情報から取得する
         qty = float(pos.positionAmt)
         mark = float(pos.markPrice)
         entry = float(pos.entryPrice)
+        # エントリーした価格は確定pnlで使用するためメンバ変数に保存
         self.entry = entry
         lev = float(pos.leverage)
 
@@ -59,10 +63,12 @@ class Manager(object):
         return pnl, roe
 
     def calc_pnl(self, qty, close):
+        # 確定pnlの計算
         pnl, roe = self._pnl(qty, self.entry, self.lev, close)
         return pnl
 
     def calc_risk(self, roe):
+        # 損切りラインの設定
         if roe < 0:
             roe = abs(roe)
             threshold = 10.0
@@ -76,6 +82,7 @@ class Manager(object):
         return stop_loss
 
     def open_position(self, balance, price, signal, interface):
+        # ポジションを持つ
         qty = self.calc_qty(balance, price, signal)
         activate = False
         orderid = None
@@ -85,13 +92,16 @@ class Manager(object):
         elif signal == -1:
             orderid = self.sell(qty,interface)
             activate = True
-
+        if activate == True:
+            print("open position {} order id : {}".format(signal,orderid))
         return activate
 
     def close_position(self, pos, signal, risk, interface):
+        # ポジションを閉じる
         qty = float(pos.positionAmt)
         activate = True
-        pnl = None
+        pnl = 0
+        orderid = None
         if qty != 0.0:
             # riskの時
             # open position -> buy or sell -> self.posside -> risk on -> close position
@@ -112,15 +122,20 @@ class Manager(object):
                     activate =  False
                 else:
                     pass
+            print("close position {} order id : {}".format(signal,orderid))
+            # ポジションを閉じた時に注文価格から確定pnlの計算
             if not activate:
-                avg_price = self.check_order(interface, orderid)
+                avg_price = self.get_exit_price(interface, orderid)
                 pnl = self.calc_pnl(qty, avg_price)
-            else:
-                pnl = None
-            print(activate, pnl)
         return activate, pnl
 
-    def check_order(self, interface, orderid):
+    @staticmethod
+    def get_exit_price(interface, orderid):
+        # ポジションを閉じた時の注文から注文時の価格を取得する（pnl計算で使用）
         order_info = interface.get_order(orderid)
         avg_price = order_info.avgPrice
         return avg_price
+
+    def check_order(self, interface, orderid):
+        # 注文が通ったか確認
+        order_info = interface.get_order(orderid)
