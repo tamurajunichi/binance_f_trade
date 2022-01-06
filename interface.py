@@ -45,16 +45,11 @@ class BinanceInterface(object):
         return qty
 
     def order(self, type='MARKET', side='BUY', position_side='BOTH', qty=1.0):
+        # 注文を投げる
         with redirect_stdout(open(os.devnull, 'w')):
             qty = abs(qty)
             qty = self._convert_qty(qty)
-            res = self.req.post_order(
-                symbol=self.symbol,
-                ordertype=type,
-                side=side,
-                positionSide=position_side,
-                quantity=str(qty)
-            )
+            res = self.req.post_order(symbol=self.symbol, ordertype=type,side=side, positionSide=position_side, quantity=str(qty))
         return res
 
     def _convert_candle(self,candles):
@@ -95,11 +90,13 @@ class BinanceInterface(object):
         return df
 
     def change_levarage(self, levarage):
+        # レバレッジの変更
         with redirect_stdout(open(os.devnull, 'w')):
             res = self.req.change_initial_leverage(symbol=self.symbol, leverage=levarage)
         return res
 
     def change_margin_type(self, margin_type):
+        # マージンタイプ変更
         with redirect_stdout(open(os.devnull, 'w')):
             try:
                 res = self.req.change_margin_type(symbol=self.symbol, marginType=margin_type)
@@ -167,8 +164,8 @@ class BinanceInterface(object):
         return orders   
 
     def get_order(self, id):
-        #with redirect_stdout(open(os.devnull, 'w')):
-        order = self.req.get_order(self.symbol,id)
+        with redirect_stdout(open(os.devnull, 'w')):
+            order = self.req.get_order(self.symbol,id)
         return order 
 
 # TODO: バックテスト用のインターフェース
@@ -177,8 +174,6 @@ class BacktestInterface(object):
 
 if __name__ == "__main__":
     bi = BinanceInterface("BTCUSDT")
-    res = bi.order(qty=0.001)
-    print(res.orderId)
     o = bi.get_all_orders()
     o= bi.get_order(o[-1].orderId)
     print(o.avgPrice)

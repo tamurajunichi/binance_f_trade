@@ -16,8 +16,9 @@ class Logger(object):
         self.long = []
         self.short = []
 
-        self.profit = []
-        self.pnl = 0
+        self.profit = [None]
+        self.rpnl = 0
+        self.upnl = 0
 
         # matplotでグラフ表示
         self.fig = plt.figure(figsize=(8,6))
@@ -35,12 +36,20 @@ class Logger(object):
         elif signal == -1:
             self.short.append(df.loc[df.index[-1], ["Close Time"]])
 
-    def save_upnl(self, df, profit):
-        self.profit.append([df.loc[df.index[-1], ["Close Time"]], profit])
+    def save_upnl(self,df,upnl):
+        # 未確定のpnl
+        #　一番後ろにこれまでの利益＋今回のupnlが入る
+        self.upnl = upnl
+        self.profit[-1]=[df.loc[df.index[-1], ["Close Time"]], self.rpnl+self.upnl]
 
-    def save_pnl(self, pnl):
-        print("save pnl %f"%(self.pnl))
-        self.pnl += pnl
+    def save_rpnl(self,df,rpnl):
+        # 確定のpnl
+        self.rpnl += rpnl
+
+    def save_pnl(self, df):
+        # 足ごとのpnlを出す
+        self.profit.append(None)
+        self.profit[-1]=[df.loc[df.index[-1], ["Close Time"]], self.rpnl+self.upnl]
 
     def tograph_mpf(self,df):
         # 使用しない
@@ -59,11 +68,10 @@ class Logger(object):
             df = GoldenCross.add_ema(df,3)
             df = GoldenCross.add_ema(df,7)
 
-        # timestampからdatetimeを作りindexにする。datetimeは日本時間を指定。
+        # timestampからdatetimeを作りindexにする
         df['datetime'] = pd.to_datetime(df['Open Time'].astype(int)/1000, unit="s")
         df=df.set_index("datetime")
-        df=df.tz_localize('utc').tz_convert('Asia/Tokyo')
-        #　現在の足から50前まで表示
+        # 現在の足から50前まで表示
         self.ohlcv_plot(df[len(df.index)-50:len(df.index)])
 
         # longとshortのマーカーをつける
@@ -71,24 +79,34 @@ class Logger(object):
         df["Short"] = pd.Series()
         if len(self.long) > 0:
             for i in self.long:
-                l = df.index[df['Close Time'] == i[0]].tolist()
-                df.loc[df.index[df.index.get_loc(l[0])], ["Long"]] = 1.0
+                try:
+                    l = df.index[df['Close Time'] == i[0]].tolist()
+                    df.loc[df.index[df.index.get_loc(l[0])], ["Long"]] = 1.0
+                except IndexError:
+                    pass
         self.ax_1.scatter(df.index, df["Long"].mask(df['Long'] == 1.0, df['Low']-20),marker="^",color="r",label="long")
         if len(self.short) > 0:
             for i in self.short:
-                l = df.index[df['Close Time'] == i[0]].tolist()
-                df.loc[df.index[df.index.get_loc(l[0])], ["Short"]] = 1.0
+                try:
+                    l = df.index[df['Close Time'] == i[0]].tolist()
+                    df.loc[df.index[df.index.get_loc(l[0])], ["Short"]] = 1.0
+                except IndexError:
+                    pass
         self.ax_1.scatter(df.index, df["Short"].mask(df['Short'] == 1.0, df['High']+20),marker="v",color="b",label="short")
         self.ax_1.legend()
 
-        df["Profit"] = self.pnl
+        # upnlの処理：self.profit[-1]=upnl→df化, cpnl時の処理：self.profit[-1]=cpnl→self.profit.append(None)→df化（一番後ろは例外処理行き）
+        df["Profit"] = 0
         for i in self.profit:
-            l = df.index[df['Close Time'] == i[0][0]].tolist()
-            # もらったdfが1分遅れてる場合があるので、そういう場合はスキップする
             try:
-                df.loc[df.index[df.index.get_loc(l[0])], ["Profit"]] = self.pnl+i[1]
+                l = df.index[df['Close Time'] == i[0][0]].tolist()
+                df.loc[df.index[df.index.get_loc(l[0])], ["Profit"]] = i[1]
             except IndexError:
+                # APIからのデータが数行遅れた場合の例外処理
                 pass
+            except TypeError:
+                pass
+                # save_rpnlで一番後ろがNoneになってる例外処理
         self.ax_2.plot(df.index, df["Profit"], color = "y")
         plt.pause(0.001)
         self.ax_1.cla()
