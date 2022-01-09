@@ -39,11 +39,7 @@ class Bot():
     
     def excute(self):
         # botのメイン実行部分
-        # TODO: 手数料含めた利益の計算
-        # TODO: レンジ相場の場合無駄にエントリーさせない
-        # TODO: interfaceのクラスをmanagerのクラスに継承させる -> 再接続時にinterfaceをもう一度インスタンス化させなおす可能性
-        # TODO: 再接続の実装
-        # TODO: log.pyの修正
+
         # 1分足のohlcvを読み取り
         df = self.interface.get_ohlcv_df(interval=CandlestickInterval.MIN1, limit=100)
         close = df.loc[df.index[-1],["Close"]][0]
@@ -65,19 +61,20 @@ class Bot():
 
         # 次の足までの残り時間
         server_time = self.interface.get_time()
-        print("時刻：%s, 終値：%s, upnl：%s, rpnl：%s, trailing_line：%s, active_position:%s"%(datetime.fromtimestamp(server_time/1000),close,self.logger.upnl,self.logger.rpnl,self.manager.trailing_line,active_position))
+        balance = self.interface.get_futures_balance()
+        print("time:%s, close:%s, upnl:%s, rpnl:%s, trailing_line:%s, active_position:%s, balance:%s"%(datetime.fromtimestamp(server_time/1000),close,self.logger.upnl,self.logger.rpnl,self.manager.trailing_line,active_position,balance))
 
         # 足が決まってからsignalを見る
         signal = 0
         if self.preinterval < curinterval:
-            # policyに従ってsignal決定(signal=1:LONG signal=-1:SHORT signal=0:NOOP)
+            # 戦略に従ってsignal決定(signal=1:LONG signal=-1:SHORT signal=0:NOOP)
             signal, df = self.strategy.get_signal(df)
             print("signal:",signal)
             if signal == 1 or signal == -1:
                 # ポジション持ってる場合
                 if active_position:
                     self.close(signal, False, df)
-                    time.sleep(0.5)
+                    time.sleep(5)
                     self.open(signal)
                 # 持ってない場合
                 else:
@@ -92,7 +89,7 @@ class Bot():
         # ポジションをもつ
         balance = self.interface.get_futures_balance()
         self.balance = balance
-        price = self.interface.get_mark_price()
+        price = self.interface.get_symbol_price()
         self.manager.open_position(balance, price, signal, self.interface)
 
     def close(self, signal, risk, df):
