@@ -18,6 +18,7 @@ def get_f_btcusdt(symbol, candle, ym, file_dir):
         return None
 
     if response_status is None:
+        os.makedirs(file_dir, exist_ok=True)
         file = open(os.path.join(file_dir,os.path.basename(file_name)),"wb")
         for chunk in response.iter_content(100000):
             file.write(chunk)
