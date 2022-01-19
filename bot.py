@@ -13,9 +13,6 @@ from interface import BinanceInterface
 from strategy import GoldenCross
 from log import Logger
 
-_api_key = os.environ.get('BINANCE_API_KEY')
-_api_secret = os.environ.get('BINANCE_API_SECRET')
-
 # binance_f -> interface.py -> information -> bot.py -> signal -> manager.py -> order
 class Bot():
     def __init__(self, symbol, margin_type, levarage):
@@ -24,7 +21,7 @@ class Bot():
         self.lev = levarage
         self.strategy = GoldenCross()
         self.interface = BinanceInterface(symbol)
-        self.manager = Manager(levarage, maker_fee=0.04, taker_fee=0.02)
+        self.manager = Manager(levarage, maker_fee=0.02, taker_fee=0.04)
         self.logger = Logger()
         self.interface.change_levarage(levarage)
         self.interface.change_margin_type(margin_type)
@@ -36,12 +33,14 @@ class Bot():
         self.profit = 0
         self.balance = 0
         self.firststep = True
+        self.df = None
     
     def excute(self):
         # botのメイン実行部分
 
         # 1分足のohlcvを読み取り
         df = self.interface.get_ohlcv_df(interval=CandlestickInterval.MIN1, limit=100)
+        self.df = df
         close = df.loc[df.index[-1],["Close"]][0]
         curinterval = df.loc[df.index[-1],["Close Time"]][0]
 
@@ -62,8 +61,12 @@ class Bot():
         # 次の足までの残り時間
         server_time = self.interface.get_time()
         balance = self.interface.get_futures_balance()
-        print("time:%s, close:%s, upnl:%s, rpnl:%s, trailing_line:%s, active_position:%s, balance:%s"%(datetime.fromtimestamp(server_time/1000),close,self.logger.upnl,self.logger.rpnl,self.manager.trailing_line,active_position,balance))
-
+        if self.firststep:
+            self.init_balance = balance
+            self.firststep = False
+        print("time:%s, close:%.2f, tline:%.2f, upnl:%.2f, rpnl:%s, fee:%s, cfee:%s, apos:%s, ibal:%s, rbal:%s, bal:%.2f, diffbal:%s"\
+            %(datetime.fromtimestamp(server_time/1000),close,self.manager.trailing_line,self.logger.upnl,self.logger.rpnl,self.manager.fee,self.manager.cfee,\
+            active_position,self.init_balance,self.init_balance+self.logger.rpnl,balance,balance-self.init_balance))
         # 足が決まってからsignalを見る
         signal = 0
         if self.preinterval < curinterval:
@@ -100,7 +103,8 @@ class Bot():
 
     def exit(self):
         # botの停止
-        self.close(None, True)
+        if self.active_position:
+            self.close(None, True, self.df)
         self.save_log()
 
     def save_log(self):

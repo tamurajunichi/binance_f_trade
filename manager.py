@@ -10,33 +10,31 @@ class Manager(object):
         self.longmark = 0
         self.shortmark = float('inf')
         self.trailing_line = 0
+        # takerとmakerどっちになるかが分からない
         self.mfee = maker_fee*0.01
         self.tfee = taker_fee*0.01
+        self.fee = 0
+        self.cfee = 0
         self.orders = {}
         self.active = False
 
     def calc_qty(self, balance, price, signal):
         # 注文量の計算
-        if signal == 1:
-            fee = self.mfee
-        elif signal == -1:
-            fee = self.tfee
-        else:
-            return 0
 
         balance = float(balance)
         price = float(price)
 
         # 現在価格とウォレットから注文に必要なbtcの注文量を計算
         qty = (balance * self.lev) / price
-        fee = price * qty * fee
-        qty = ((balance-fee) * self.lev) / price
         qty = qty * 0.8
 
-        # rpnlの計算で利用するため手数料を保存
-        self.fee = fee
-
         return qty
+    
+    def calc_fee(self, price, qty):
+        cost = price*qty
+        self.fee = cost*self.tfee
+        self.cfee += self.fee
+        #print("price:%s, qty:%s, fee:%s"%(price,qty,self.fee))
 
     def buy(self, qty, price, interface):
         # 買い注文
@@ -83,6 +81,7 @@ class Manager(object):
     def open_position(self, balance, price, signal, interface):
         # ポジションを持つ
         qty = self.calc_qty(balance, price, signal)
+        fee = self.calc_fee(price, qty)
         orderid = None
         if signal == 1:
             orderid = self.buy(qty, price, interface)
@@ -90,12 +89,13 @@ class Manager(object):
         elif signal == -1:
             orderid = self.sell(qty, price, interface)
             self.active = True
-        print("open position {} order id : {}".format(signal,orderid))
+        print("open position {} order id : {}, fee :{}".format(signal,orderid,self.fee))
 
     def close_position(self, pos, signal, risk, interface):
         # ポジションを閉じる
         qty = float(pos.positionAmt)
         price = interface.get_symbol_price()
+        fee = self.calc_fee(price, qty)
         pnl = 0
         orderid = None
         # open position -> buy or sell -> self.posside -> risk on -> close position
@@ -136,7 +136,7 @@ class Manager(object):
 
     def calc_upnl(self, pos):
         # upnlの計算
-        # posの保存
+        # ポジション保存
         self.pos = pos
         # 計算に必要なものをポジション情報から取得する
         qty = float(pos.positionAmt)
@@ -149,7 +149,7 @@ class Manager(object):
 
         pnl, roe = self._pnl(qty, entry, lev, mark)
         roe = abs(roe)
-        return pnl, roe
+        return pnl-self.fee, roe
 
     def calc_pnl(self, qty, close):
         # 確定pnlの計算
