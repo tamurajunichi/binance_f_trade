@@ -59,6 +59,7 @@ class Bot():
                 print("stop_loss")
                 self.close(None, True, df)
             self.logger.save_upnl(df, upnl)
+            self.logger.save_pnl(df)
         else:
             # ポジションを持ってないときはupnlを0に初期化
             self.logger.upnl = 0

@@ -104,10 +104,11 @@ class Backtest(object):
         elif self.candle_tick == 3:
             pass
         df.loc[idx-1,"Close"] = df.loc[idx-1,column]
+        self.position.markPrice = df.loc[idx-1,"Close"]
 
         # 足tickを1進める
         self.candle_tick += 1
-        if self.candle_tick == 3:
+        if self.candle_tick == 4:
             self.candle_tick = 0
             self.tick += 1
         return df
@@ -119,6 +120,7 @@ class Backtest(object):
     def get_symbol_price_ticker(self,symbol=None):
         df = self.df[["Open Time", "Open", "High", "Low", "Close", "Volume", "Close Time"]].copy()
         idx = self.df_idx+self.tick
+        df = df[idx-100:idx]
 
         # 内部は足ごとに4tick状態を持つ
         column = "Close"
@@ -132,7 +134,7 @@ class Backtest(object):
             pass
         df.loc[idx-1,"Close"] = df.loc[idx-1,column]
 
-        price = df.loc[idx,"Close"]
+        price = df.loc[idx-1,"Close"]
         return price
 
     def get_balance(self):
@@ -140,8 +142,10 @@ class Backtest(object):
         return balance
 
     def get_servertime(self):
+        df = self.df[["Open Time", "Open", "High", "Low", "Close", "Volume", "Close Time"]].copy()
         idx = self.df_idx+self.tick
-        time = self.df.loc[idx,"Open Time"]
+        df = df[idx-100:idx]
+        time = self.df.loc[idx-1,"Open Time"]
         return time
 
     def get_order(self, symbol=None, oid=0):
