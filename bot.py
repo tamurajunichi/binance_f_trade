@@ -114,7 +114,7 @@ class Bot():
     def save_log(self):
         # データフレームをcsvにして保存
         print("output logging...")
-        file_path = self.logger.save_to_csv(self.logger.df)
+        file_path = self.logger.save_to_csv()
         print("log output '%s'"%(file_path))
 
 def main():

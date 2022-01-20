@@ -53,19 +53,33 @@ class Backtest(object):
 
         self.position = Position(0.0, 0.0)
 
+    @staticmethod
+    def _pnl(qty, entry, lev, close):
+        # pnlとroeの計算
+        imr = 1/lev
+        initial_margin = qty * entry * imr
+        pnl = (close - entry) * qty
+        roe = pnl/initial_margin
+        return pnl, roe
+
+
     def post_order(self, symbol=None, ordertype="LIMIT",side=None, positionSide="BOTH", qty=0, timeInForce="GTC", price=0):
         # もらったオーダーの処理
         o = Order(status="FILLED", orderId=self.order_count, side=side, qty=qty, price=price)
         self.order_count+=1
         self.orders.append(o)
 
-        # balanceから手薄量を引く
+        # balanceから手数料を引く
         cost = price*qty
         self.fee = cost*self.tfee
         self.balance -= self.fee
 
         # positionを保存
         if self.order_count % 2 == 0:
+            # ポジションを閉じたときの計算
+            pnl,roe = self._pnl(qty=qty, entry=self.position.entryPrice, lev=20, close=price)
+            self.balance += pnl
+            # ポジションを初期化
             self.position = Position(0.0, price)
         else:
             self.position = Position(qty, price)
@@ -75,19 +89,21 @@ class Backtest(object):
 
     def get_candlestick_data(self, symbol=None, interval=None, limit=None):
         # dfを渡す
-        df = self.df[["Open Time", "Open", "High", "Low", "Close", "Volume", "Close Time"]]
+        df = self.df[["Open Time", "Open", "High", "Low", "Close", "Volume", "Close Time"]].copy()
         idx = self.df_idx+self.tick
         df = df[idx-100:idx]
 
         # 内部は足ごとに4tick状態を持つ
+        column = "Close"
         if self.candle_tick == 0:
-            df["Close"] = df["Open"]
+            column = "Open"
         elif self.candle_tick == 1:
-            df["Close"] = df["High"]
+            column = "High"
         elif self.candle_tick == 2:
-            df["Close"] = df["Low"]
+            column = "Low"
         elif self.candle_tick == 3:
             pass
+        df.loc[idx-1,"Close"] = df.loc[idx-1,column]
 
         # 足tickを1進める
         self.candle_tick += 1
@@ -101,18 +117,20 @@ class Backtest(object):
         return pos
 
     def get_symbol_price_ticker(self,symbol=None):
-        df = self.df[["Open Time", "Open", "High", "Low", "Close", "Volume", "Close Time"]]
+        df = self.df[["Open Time", "Open", "High", "Low", "Close", "Volume", "Close Time"]].copy()
         idx = self.df_idx+self.tick
 
         # 内部は足ごとに4tick状態を持つ
+        column = "Close"
         if self.candle_tick == 0:
-            df["Close"] = df["Open"]
+            column = "Open"
         elif self.candle_tick == 1:
-            df["Close"] = df["High"]
+            column = "High"
         elif self.candle_tick == 2:
-            df["Close"] = df["Low"]
+            column = "Low"
         elif self.candle_tick == 3:
             pass
+        df.loc[idx-1,"Close"] = df.loc[idx-1,column]
 
         price = df.loc[idx,"Close"]
         return price

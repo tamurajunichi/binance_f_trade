@@ -72,7 +72,8 @@ class Logger(object):
         df['datetime'] = pd.to_datetime(df['Open Time'].astype(int)/1000, unit="s")
         df=df.set_index("datetime")
         # 現在の足から50前まで表示
-        self.ohlcv_plot(df[len(df.index)-50:len(df.index)])
+        df = df[len(df.index)-50:len(df.index)]
+        self.ohlcv_plot(df)
 
         # longとshortのマーカーをつける
         df["Long"] = pd.Series()
@@ -80,16 +81,17 @@ class Logger(object):
         if len(self.long) > 0:
             for i in self.long:
                 try:
-                    l = df.index[df['Close Time'] == i[0]].tolist()
-                    df.loc[df.index[df.index.get_loc(l[0])], ["Long"]] = 1.0
+                    l = df.index[df['Close Time'] == i[0]]
+                    if l[0] in df.index:
+                        df.loc[l, "Long"] = 1.0
                 except IndexError:
                     pass
         self.ax_1.scatter(df.index, df["Long"].mask(df['Long'] == 1.0, df['Low']-20),marker="^",color="r",label="long")
         if len(self.short) > 0:
             for i in self.short:
                 try:
-                    l = df.index[df['Close Time'] == i[0]].tolist()
-                    df.loc[df.index[df.index.get_loc(l[0])], ["Short"]] = 1.0
+                    l = df.index[df['Close Time'] == i[0]]
+                    df.loc[l, "Short"] = 1.0
                 except IndexError:
                     pass
         self.ax_1.scatter(df.index, df["Short"].mask(df['Short'] == 1.0, df['High']+20),marker="v",color="b",label="short")
@@ -99,8 +101,8 @@ class Logger(object):
         df["Profit"] = 0
         for i in self.profit:
             try:
-                l = df.index[df['Close Time'] == i[0][0]].tolist()
-                df.loc[df.index[df.index.get_loc(l[0])], ["Profit"]] = i[1]
+                l = df.index[df['Close Time'] == i[0][0]]
+                df.loc[l,"Profit"] = i[1]
             except IndexError:
                 # APIからのデータが数行遅れた場合の例外処理
                 pass
@@ -134,9 +136,9 @@ class Logger(object):
             file_name = dt_now.strftime('%Y-%m-%d_%H-%M-%S')
             self.df_log_path = log_dir + "\\" +file_name + '.csv'
     
-    def save_to_csv(self, df):
+    def save_to_csv(self):
         # logで溜め込んだohlcvデータをcsvにする
-        df.to_csv(self.df_log_path, chunksize=10000)
+        self.df.to_csv(self.df_log_path, chunksize=10000)
         return self.df_log_path
 
     def save_df(self, df):
