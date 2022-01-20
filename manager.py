@@ -30,11 +30,15 @@ class Manager(object):
 
         return qty
     
-    def calc_fee(self, price, qty):
+    def calc_fee(self, price, qty, interface):
+        qty = abs(qty)
+        qty = interface.convert_qty(qty)
+        price = abs(price)
+        price = interface.convert_price(price)
         cost = price*qty
         self.fee = cost*self.tfee
         self.cfee += self.fee
-        #print("price:%s, qty:%s, fee:%s"%(price,qty,self.fee))
+        print("price:%s, qty:%s, fee:%s"%(price,qty,self.fee))
 
     def buy(self, qty, price, interface):
         # 買い注文
@@ -81,7 +85,7 @@ class Manager(object):
     def open_position(self, balance, price, signal, interface):
         # ポジションを持つ
         qty = self.calc_qty(balance, price, signal)
-        fee = self.calc_fee(price, qty)
+        fee = self.calc_fee(price, qty, interface)
         orderid = None
         if signal == 1:
             orderid = self.buy(qty, price, interface)
@@ -95,7 +99,7 @@ class Manager(object):
         # ポジションを閉じる
         qty = float(pos.positionAmt)
         price = interface.get_symbol_price()
-        fee = self.calc_fee(price, qty)
+        fee = self.calc_fee(price, qty, interface)
         pnl = 0
         orderid = None
         # open position -> buy or sell -> self.posside -> risk on -> close position
@@ -155,7 +159,8 @@ class Manager(object):
         # 確定pnlの計算
         pnl, roe = self._pnl(qty, self.entry, self.lev, close)
         # 手数料
-        pnl = pnl - self.fee
+        pnl = pnl - self.cfee
+        self.cfee = 0
         return pnl
 
     def calc_risk(self, roe):

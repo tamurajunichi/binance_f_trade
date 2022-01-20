@@ -130,9 +130,9 @@ class Logger(object):
     def  initialize_log_name(self):
         # savedfで使用するログのパスを作る
             dt_now = datetime.datetime.now()
-            log_dir = r'df_log\\'
-            file_name = dt_now.strftime('%Y-%m-%d_%H:%M:%S')
-            self.df_log_path = log_dir + file_name + '.csv'
+            log_dir = "df_log"
+            file_name = dt_now.strftime('%Y-%m-%d_%H-%M-%S')
+            self.df_log_path = log_dir + "\\" +file_name + '.csv'
     
     def save_to_csv(self, df):
         # logで溜め込んだohlcvデータをcsvにする

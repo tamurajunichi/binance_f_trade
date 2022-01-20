@@ -64,7 +64,7 @@ class Bot():
         if self.firststep:
             self.init_balance = balance
             self.firststep = False
-        print("time:%s, close:%.2f, tline:%.2f, upnl:%.2f, rpnl:%s, fee:%s, cfee:%s, apos:%s, ibal:%s, rbal:%s, bal:%.2f, diffbal:%s"\
+        print("time:%s, close:%.3f, tline:%.3f, upnl:%.3f, rpnl:%.3f, fee:%.3f, cfee:%.3f, apos:%s, ibal:%.3f, rbal:%.3f, bal:%.3f, diff:%.3f"\
             %(datetime.fromtimestamp(server_time/1000),close,self.manager.trailing_line,self.logger.upnl,self.logger.rpnl,self.manager.fee,self.manager.cfee,\
             active_position,self.init_balance,self.init_balance+self.logger.rpnl,balance,balance-self.init_balance))
         # 足が決まってからsignalを見る
@@ -77,7 +77,6 @@ class Bot():
                 # ポジション持ってる場合
                 if active_position:
                     self.close(signal, False, df)
-                    time.sleep(5)
                     self.open(signal)
                 # 持ってない場合
                 else:
