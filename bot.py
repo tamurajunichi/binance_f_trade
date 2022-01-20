@@ -15,7 +15,7 @@ from log import Logger
 
 # binance_f -> interface.py -> information -> bot.py -> signal -> manager.py -> order
 class Bot():
-    def __init__(self, symbol, margin_type, levarage, backtest=False):
+    def __init__(self, symbol, margin_type, levarage, backtest=False, plot=False):
         self.symbol = symbol
         self.margin = margin_type
         self.lev = levarage
@@ -24,9 +24,9 @@ class Bot():
         self.strategy = GoldenCross()
         self.interface = BinanceInterface(symbol)
         if self.backtest:
-            self.interface = BacktestInterface(symbol)
+            self.interface = BacktestInterface(symbol,backtest_balance=100)
         self.manager = Manager(levarage, maker_fee=0.02, taker_fee=0.04)
-        self.logger = Logger()
+        self.logger = Logger(plot=plot)
 
         self.interface.change_levarage(levarage)
         self.interface.change_margin_type(margin_type)
@@ -45,7 +45,8 @@ class Bot():
 
         # 1分足のohlcvを読み取り
         df = self.interface.get_ohlcv_df(interval=CandlestickInterval.MIN1, limit=100)
-        self.df = df
+        self.df = df.copy()
+        self.logger.save_df(df.copy())
         close = df.loc[df.index[-1],["Close"]][0]
         curinterval = df.loc[df.index[-1],["Close Time"]][0]
 
@@ -91,7 +92,7 @@ class Bot():
             # ポジションサイドの保存
             self.logger.save_position_side(signal, df)
             self.preinterval = curinterval
-        self.logger.tograph_mpl(df, signal)
+        self.logger.plot_df(df, signal)
     
     def open(self, signal):
         # ポジションをもつ
@@ -121,7 +122,8 @@ class Bot():
 def main():
     s = 'BTCUSDT'
     backtest = True
-    bot = Bot(symbol=s,margin_type='CROSSED',levarage=20, backtest=backtest)
+    plot = False
+    bot = Bot(symbol=s,margin_type='CROSSED',levarage=20, backtest=backtest, plot=plot)
     while True:
         try:
             bot.excute()

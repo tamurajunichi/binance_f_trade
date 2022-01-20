@@ -7,9 +7,23 @@ import pandas as pd
 import numpy as np
 import datetime
 from strategy import GoldenCross
+import time
+
+class Timer(object):
+    def __init__(self):
+        self.t = 0
+        self.p_time = 0
+
+    def start(self):
+        self.t = time.time()
+    
+    def end(self):
+        self.p_time = time.time() - self.t
+        print(self.p_time)
+
 
 class Logger(object):
-    def __init__(self) -> None:
+    def __init__(self, plot) -> None:
         self.first_step = True
         self.df = None
         self.initialize_log_name()
@@ -19,28 +33,31 @@ class Logger(object):
         self.profit = [None]
         self.rpnl = 0
         self.upnl = 0
+        self.plot = plot
+        self.timer = Timer()
 
         # matplotでグラフ表示
-        self.fig = plt.figure(figsize=(8,6))
-        self.gs_master = GridSpec(nrows=4, ncols=2, height_ratios=[1,1,1,1])
-        self.gs_1 = GridSpecFromSubplotSpec(nrows=3, ncols=1, subplot_spec=self.gs_master[0:3, :])
-        self.ax_1 = self.fig.add_subplot(self.gs_1[:,:])
-        self.gs_2 = GridSpecFromSubplotSpec(nrows=1, ncols=1, subplot_spec=self.gs_master[3, :])
-        self.ax_2 = self.fig.add_subplot(self.gs_2[:,:])
-        self.ax_1v=self.ax_1.twinx()
+        if plot:
+            self.fig = plt.figure(figsize=(8,6))
+            self.gs_master = GridSpec(nrows=4, ncols=2, height_ratios=[1,1,1,1])
+            self.gs_1 = GridSpecFromSubplotSpec(nrows=3, ncols=1, subplot_spec=self.gs_master[0:3, :])
+            self.ax_1 = self.fig.add_subplot(self.gs_1[:,:])
+            self.gs_2 = GridSpecFromSubplotSpec(nrows=1, ncols=1, subplot_spec=self.gs_master[3, :])
+            self.ax_2 = self.fig.add_subplot(self.gs_2[:,:])
+            self.ax_1v=self.ax_1.twinx()
 
     def save_position_side(self, signal, df):
         # log保存用
         if signal == 1:
-            self.long.append(df.loc[df.index[-1], ["Close Time"]])
+            self.df.loc[self.df.index[-1],"Long"] = 1.0
         elif signal == -1:
-            self.short.append(df.loc[df.index[-1], ["Close Time"]])
+            self.df.loc[self.df.index[-1],"Short"] = 1.0
 
     def save_upnl(self,df,upnl):
         # 未確定のpnl
         #　一番後ろにこれまでの利益＋今回のupnlが入る
         self.upnl = upnl
-        self.profit[-1]=[df.loc[df.index[-1], ["Close Time"]], self.rpnl+self.upnl]
+        self.df.loc[self.df.index[-1],"Profit"] = self.rpnl+self.upnl
 
     def save_rpnl(self,df,rpnl):
         # 確定のpnl
@@ -48,8 +65,7 @@ class Logger(object):
 
     def save_pnl(self, df):
         # 足ごとのpnlを出す
-        self.profit.append(None)
-        self.profit[-1]=[df.loc[df.index[-1], ["Close Time"]], self.rpnl+self.upnl]
+        self.df.loc[self.df.index[-1],"Profit"] = self.rpnl+self.upnl
 
     def tograph_mpf(self,df):
         # 使用しない
@@ -62,59 +78,22 @@ class Logger(object):
         df = df[["Open","High", "Low", "Close", "Volume"]]
         mpf.plot(df[len(df.index)-50:len(df.index)], addplot=ema,type='candle', figratio=(12,4), savefig="bot_test.png",volume=True)
     
-    def tograph_mpl(self,df,signal):
-        # emaを算出してdfに付け足す
-        if signal == 0:
-            df = GoldenCross.add_ema(df,3)
-            df = GoldenCross.add_ema(df,7)
+    def plot_df(self,df,signal):
+        # self.dfに保存→dfを作る→作ったdfにlong short profitを入れる
+        if self.plot:
+            df = self.df[self.df.index[-50]:].copy()
+            df['datetime'] = pd.to_datetime(df['Open Time'].astype(int)/1000, unit="s")
+            df=df.set_index("datetime")
 
-        # timestampからdatetimeを作りindexにする
-        df['datetime'] = pd.to_datetime(df['Open Time'].astype(int)/1000, unit="s")
-        df=df.set_index("datetime")
-        # 現在の足から50前まで表示
-        df = df[len(df.index)-50:len(df.index)]
-        self.ohlcv_plot(df)
-
-        # longとshortのマーカーをつける
-        df["Long"] = pd.Series()
-        df["Short"] = pd.Series()
-        if len(self.long) > 0:
-            for i in self.long:
-                try:
-                    l = df.index[df['Close Time'] == i[0]]
-                    if l[0] in df.index:
-                        df.loc[l, "Long"] = 1.0
-                except IndexError:
-                    pass
-        self.ax_1.scatter(df.index, df["Long"].mask(df['Long'] == 1.0, df['Low']-20),marker="^",color="r",label="long")
-        if len(self.short) > 0:
-            for i in self.short:
-                try:
-                    l = df.index[df['Close Time'] == i[0]]
-                    df.loc[l, "Short"] = 1.0
-                except IndexError:
-                    pass
-        self.ax_1.scatter(df.index, df["Short"].mask(df['Short'] == 1.0, df['High']+20),marker="v",color="b",label="short")
-        self.ax_1.legend()
-
-        # upnlの処理：self.profit[-1]=upnl→df化, cpnl時の処理：self.profit[-1]=cpnl→self.profit.append(None)→df化（一番後ろは例外処理行き）
-        df["Profit"] = 0
-        for i in self.profit:
-            try:
-                l = df.index[df['Close Time'] == i[0][0]]
-                df.loc[l,"Profit"] = i[1]
-            except IndexError:
-                # APIからのデータが数行遅れた場合の例外処理
-                pass
-            except TypeError:
-                pass
-                # save_rpnlで一番後ろがNoneになってる例外処理
-        self.ax_2.plot(df.index, df["Profit"], color = "y")
-        plt.pause(0.001)
-        self.ax_1.cla()
-        self.ax_1v.cla()
-        self.ax_2.cla()
-        self.save_df(df)
+            self.ohlcv_plot(df)
+            self.ax_1.scatter(df.index, df["Long"].mask(df['Long'] == 1.0, df['Low']-20),marker="^",color="r",label="long")
+            self.ax_1.scatter(df.index, df["Short"].mask(df['Short'] == 1.0, df['High']+20),marker="v",color="b",label="short")
+            self.ax_1.legend()
+            self.ax_2.plot(df.index, df["Profit"], color = "y")
+            plt.pause(0.001)
+            self.ax_1.cla()
+            self.ax_1v.cla()
+            self.ax_2.cla()
 
     def animation(self, df, signal):
         # matplotでグラフ表示
@@ -142,22 +121,19 @@ class Logger(object):
         return self.df_log_path
 
     def save_df(self, df):
+        df = GoldenCross.add_ema(df,3)
+        df = GoldenCross.add_ema(df,7)
         if self.first_step:
+            df["Long"] = pd.Series()
+            df["Short"] = pd.Series()
+            df["Profit"] = 0
             self.df = df
             self.first_step = False
         else:
+            self.df.loc[self.df.index[-1], "Close"] = df.loc[df.index[-1], "Close"]
             self.df = self.df.append(df, ignore_index=False).drop_duplicates(subset="Close Time").reset_index(drop=True)
 
     def ohlcv_plot(self,df):
-        """
-        matplotlibのAxesオブジェクトにローソク足を描画する.
-        :param ax_1:ローソク足を描画するAxesオブジェクト.
-        :param df:DataFrameオブジェクト. 必要なカラムはtimestamp,open,high,low,close,volume.
-        """
-
-        # warning出さないようにcopyする
-        df = df.copy()
-
         # ローソク足の幅を設定
         # matplotlib上でwidth=1->1日となるのでローソク足の時間軸に応じて幅を設定
         time_span=df["Open Time"].diff()[1]

@@ -32,7 +32,7 @@ class Position(object):
         self.leverage = 20
 
 class Backtest(object):
-    def __init__(self):
+    def __init__(self,balance):
         symbol = "BTCUSDT"
         candle = "1m"
         y= "2021"
@@ -44,7 +44,7 @@ class Backtest(object):
         self.tick = 0
         self.candle_tick = 0
 
-        self.balance = 10
+        self.balance = balance
         self.tfee = 0.04*0.01
         self.fee = 0
 

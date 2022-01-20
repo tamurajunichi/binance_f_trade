@@ -212,9 +212,9 @@ class BinanceInterface(object):
 
 # TODO: バックテスト用のインターフェース
 class BacktestInterface(object):
-    def __init__(self, symbol):
+    def __init__(self, symbol,backtest_balance):
         self.symbol = symbol
-        self.bt = Backtest()
+        self.bt = Backtest(balance=backtest_balance)
 
     def convert_qty(self,qty):
         return round(qty, 3)
