@@ -125,7 +125,7 @@ class Manager(object):
         print("close position {} order id : {}".format(signal,orderid))
         # ポジションを閉じた時に注文価格から確定pnlの計算
         if signal == 1 or signal == -1 or signal == None:
-            avg_price = self.get_exit_price(interface, orderid)
+            avg_price = interface.get_exit_price(orderid)
             pnl = self.calc_pnl(qty, avg_price)
         return pnl
 
@@ -212,13 +212,6 @@ class Manager(object):
                 self.trailing_line = self.mark + 80
         else:
             pass
-
-    @staticmethod
-    def get_exit_price(interface, orderid):
-        # ポジションを閉じた時の注文から注文時の価格を取得する（pnl計算で使用）
-        order_info = interface.get_order(orderid)
-        avg_price = order_info.avgPrice
-        return avg_price
 
     def check_order(self, interface, orderid):
         # 注文が通ったか確認

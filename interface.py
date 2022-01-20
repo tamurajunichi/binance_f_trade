@@ -66,7 +66,7 @@ class BinanceInterface(object):
         price = self._round_to_precision(price,precision)
         return price
 
-    def order(self, type='LIMIT', side='BUY', position_side='BOTH', qty=1.0 ,time_in_force='GTC', price=0):
+    def order(self, ordertype='LIMIT', side='BUY', position_side='BOTH', qty=1.0 ,time_in_force='GTC', price=0):
         # 注文
         qty = abs(qty)
         qty = self.convert_qty(qty)
@@ -76,7 +76,7 @@ class BinanceInterface(object):
         while True:
             try:
                 with redirect_stdout(open(os.devnull, 'w')):
-                    res = self.req.post_order(symbol=self.symbol, ordertype=type,side=side, positionSide=position_side, quantity=str(qty), timeInForce=time_in_force, price=str(price))
+                    res = self.req.post_order(symbol=self.symbol, ordertype=ordertype,side=side, positionSide=position_side, quantity=str(qty), timeInForce=time_in_force, price=str(price))
                 break
             except BinanceApiException as e:
                 print(e)
@@ -194,15 +194,21 @@ class BinanceInterface(object):
             orders =  self.req.get_all_orders(self.symbol)
         return orders   
 
-    def get_order(self, id):
+    def get_order(self, oid):
         with redirect_stdout(open(os.devnull, 'w')):
-            order = self.req.get_order(self.symbol,id)
+            order = self.req.get_order(self.symbol,oid)
         return order 
 
-    def cancel_order(self, id):
+    def cancel_order(self, oid):
         with redirect_stdout(open(os.devnull, 'w')):
-            result = self.req.cancel_order(self.symbol, id)
+            result = self.req.cancel_order(self.symbol, oid)
         return result
+
+    def get_exit_price(self, orderid):
+        # ポジションを閉じた時の注文から注文時の価格を取得する（pnl計算で使用）
+        order_info = self.get_order(orderid)
+        avg_price = order_info.avgPrice
+        return avg_price
 
 # TODO: バックテスト用のインターフェース
 class BacktestInterface(object):
@@ -210,45 +216,23 @@ class BacktestInterface(object):
         self.symbol = symbol
         self.bt = Backtest()
 
-    def order(self, ordertype='MARKET', side='BUY', position_side='BOTH', qty=1.0):
-        # 注文を投げる
-        res = self.bt.post_order(symbol=self.symbol, ordertype=ordertype,side=side, positionSide=position_side, quantity=qty)
+    def convert_qty(self,qty):
+        return round(qty, 3)
+
+    def convert_price(self,price):
+        return round(price, 2)
+
+    def order(self, ordertype='LIMIT', side='BUY', position_side='BOTH', qty=1.0 ,time_in_force='GTC', price=0):
+        # 注文
+        qty = abs(qty)
+        qty = self.convert_qty(qty)
+        price = abs(price)
+        price = self.convert_price(price)
+        res = self.bt.post_order(symbol=self.symbol, ordertype=ordertype,side=side, positionSide=position_side, qty=qty, timeInForce=time_in_force, price=price)
         return res
 
-    def _convert_candle(self,candles):
-        ot = []
-        o = []
-        h = []
-        l = []
-        c = []
-        v = []
-        ct = []
-        for candle in candles:
-            ot.append(int(candle.openTime))
-            o.append(float(candle.open))
-            h.append(float(candle.high))
-            l.append(float(candle.low))
-            c.append(float(candle.close))
-            v.append(float(candle.volume))
-            ct.append(int(candle.closeTime))
-        return ot, o, h, l, c, v, ct
-
-    def _to_dataframe(self,ot,o, h, l, c, v, ct):
-        df = pd.DataFrame()
-        df['Open Time'] = ot
-        df['Open'] = o
-        df['High'] = h
-        df['Low'] = l
-        df['Close'] = c
-        df['Volume'] = v
-        df['Close Time'] = ct
-        return df
-
     def get_ohlcv_df(self, interval, limit):
-        # ローソク足を直近からlimitの数だけ取ってくる
-        candles = self.bt.get_candlestick_data(symbol=self.symbol, interval=interval,limit=limit)
-        ot, o, h, l, c, v, ct = self._convert_candle(candles)
-        df = self._to_dataframe(ot, o, h, l, c, v, ct)
+        df = self.bt.get_candlestick_data()
         return df
 
     def change_levarage(self, levarage):
@@ -261,7 +245,7 @@ class BacktestInterface(object):
 
     def get_specific_positon(self):
         # BTCUSDT市場で持ってるポジションをとる
-        self.bt.get_position()
+        position = self.bt.get_position()
         return position
     
     def check_in_position(self):
@@ -286,9 +270,15 @@ class BacktestInterface(object):
         time = self.bt.get_servertime()
         return time
 
-    def get_order(self, id):
-        order = self.bt.get_order(self.symbol,id)
+    def get_order(self, oid):
+        order = self.bt.get_order(self.symbol,oid)
         return order 
+
+    def get_exit_price(self, orderid):
+        # ポジションを閉じた時の注文から注文時の価格を取得する（pnl計算で使用）
+        order_info = self.get_order(orderid)
+        avg_price = order_info.avgPrice
+        return avg_price
 
 
 if __name__ == "__main__":

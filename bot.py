@@ -9,20 +9,25 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 
 from manager import Manager
-from interface import BinanceInterface
+from interface import BinanceInterface, BacktestInterface
 from strategy import GoldenCross
 from log import Logger
 
 # binance_f -> interface.py -> information -> bot.py -> signal -> manager.py -> order
 class Bot():
-    def __init__(self, symbol, margin_type, levarage):
+    def __init__(self, symbol, margin_type, levarage, backtest=False):
         self.symbol = symbol
         self.margin = margin_type
         self.lev = levarage
+        self.backtest = backtest
+
         self.strategy = GoldenCross()
         self.interface = BinanceInterface(symbol)
+        if self.backtest:
+            self.interface = BacktestInterface(symbol)
         self.manager = Manager(levarage, maker_fee=0.02, taker_fee=0.04)
         self.logger = Logger()
+
         self.interface.change_levarage(levarage)
         self.interface.change_margin_type(margin_type)
 
@@ -114,11 +119,13 @@ class Bot():
 
 def main():
     s = 'BTCUSDT'
-    bot = Bot(symbol=s,margin_type='CROSSED',levarage=20)
+    backtest = True
+    bot = Bot(symbol=s,margin_type='CROSSED',levarage=20, backtest=backtest)
     while True:
         try:
             bot.excute()
-            time.sleep(0.5)
+            if not backtest:
+                time.sleep(1)
         except KeyboardInterrupt:
             print("KeyboardInterrupt")
             bot.exit()
