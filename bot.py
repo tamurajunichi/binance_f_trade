@@ -5,9 +5,6 @@ from binance_f.model.constant import CandlestickInterval
 from binance_f.exception.binanceapiexception import BinanceApiException
 from datetime import datetime
 
-import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
-
 from manager import Manager
 from interface import BinanceInterface, BacktestInterface
 from strategy import GoldenCross

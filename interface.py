@@ -1,6 +1,3 @@
-import os
-from contextlib import redirect_stdout
-
 from binance_f import RequestClient
 from binance_f.constant.test import *
 from binance_f.base.printobject import *
@@ -9,6 +6,7 @@ from binance.client import Client
 from binance_f.exception.binanceapiexception import BinanceApiException
 
 import os
+from contextlib import redirect_stdout
 import pandas as pd
 from datetime import datetime
 import time
