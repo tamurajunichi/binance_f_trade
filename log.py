@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import datetime
+from datetime import datetime, timezone, timedelta
 import time
 
 from strategy import GoldenCross
@@ -18,7 +18,6 @@ class Logger(object):
         self.rpnl = 0
         self.upnl = 0
         self.plot = plot
-        self.timer = Timer()
 
         # plot用のインスタンス
         if self.plot:
@@ -48,14 +47,15 @@ class Logger(object):
     def plot_df(self,df,signal):
         # self.dfに保存→dfを作る→作ったdfにlong short profitを入れる
         if self.plot:
-            df = self.df[self.df.index[-50]:].copy()
-            df['datetime'] = pd.to_datetime(df['Open Time'].astype(int)/1000, unit="s")
+            df = self.df[self.df.index[-100]:].copy()
+            JST = timezone(timedelta(hours=+9), "JST")
+            df['datetime'] = df["Open Time"].apply(lambda d: datetime.fromtimestamp(int(d/1000), JST))
             df=df.set_index("datetime")
             i_plot.plot_df(df)
 
     def initialize_log_name(self):
         # savedfで使用するログのパスを作る
-            dt_now = datetime.datetime.now()
+            dt_now = datetime.now()
             log_dir = "df_log"
             file_name = dt_now.strftime('%Y-%m-%d_%H-%M-%S')
             self.df_log_path = log_dir + "\\" +file_name + '.csv'
@@ -66,8 +66,8 @@ class Logger(object):
         return self.df_log_path
 
     def save_df(self, df):
-        df = GoldenCross.add_ema(df,3)
-        df = GoldenCross.add_ema(df,7)
+        df = GoldenCross.add_ema(df,GoldenCross.s_ema)
+        df = GoldenCross.add_ema(df,GoldenCross.l_ema)
         if self.first_step:
             df["Long"] = pd.Series()
             df["Short"] = pd.Series()
@@ -85,12 +85,13 @@ def read_csv(file_path):
 
 def plot_df(df):
     plot = Plot(realtime=False)
-    df['datetime'] = pd.to_datetime(df['Open Time'].astype(int)/1000, unit="s")
+    JST = timezone(timedelta(hours=+9), "JST")
+    df['datetime'] = df["Open Time"].apply(lambda d: datetime.fromtimestamp(int(d/1000), JST))
     df=df.set_index("datetime")
     plot.plot_df(df=df)
 
 def main():
-    file_path = "df_log/2022-01-21_12-24-09.csv"
+    file_path = "df_log/2022-01-21_17-50-04.csv"
     df = read_csv(file_path)
     plot_df(df)
 

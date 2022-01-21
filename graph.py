@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 from matplotlib import dates as mdates
 import numpy as np
 
+from strategy import GoldenCross
+
 class Plot(object):
     def __init__(self, realtime=True):
         self.realtime = realtime
@@ -21,6 +23,7 @@ class Plot(object):
         self.ax_1.scatter(df.index, df["Short"].mask(df['Short'] == 1.0, df['High']+20),marker="v",color="b",label="short")
         self.ax_1.legend()
         self.ax_2.plot(df.index, df["Profit"], color = "y")
+        self.ax_2.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M"))
         if self.realtime:
             plt.pause(0.001)
             self.ax_1.cla()
@@ -52,10 +55,10 @@ class Plot(object):
         self.ax_1.vlines(df.index,df["Low"],df["High"],linewidth=1,color="#666666",zorder=1)
 
         # EMA
-        ema3 = df["ema3"]
-        ema7 = df["ema7"]
-        self.ax_1.plot(df.index,ema3,color="#2EF9FF",linewidth=.5)
-        self.ax_1.plot(df.index,ema7,color="#FF2ED6",linewidth=.5)
+        s_ema = df["ema"+str(GoldenCross.s_ema)]
+        l_ema = df["ema"+str(GoldenCross.l_ema)]
+        self.ax_1.plot(df.index,s_ema,color="#2EF9FF",linewidth=.5)
+        self.ax_1.plot(df.index,l_ema,color="#FF2ED6",linewidth=.5)
 
         # 価格目盛調整
         # グラフ下部に出来高の棒グラフを描画するので、そのためのスペースを空けるよう目盛を調整する
@@ -67,7 +70,8 @@ class Plot(object):
         self.ax_1.set_ylim(min_tick, ticks[-1])
         self.ax_1.set_yticks(ticks[1:])
         self.ax_1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
-        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M")) 
+        self.ax_1.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M"))
+        #plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M")) 
         plt.xticks(rotation=30)
         self.ax_1.set_axisbelow(True)
         self.ax_1.grid(True)

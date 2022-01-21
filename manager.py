@@ -10,7 +10,7 @@ class Manager(object):
         self.longmark = 0
         self.shortmark = float('inf')
         self.trailing_line = 0
-        self.trailing_diff = 100
+        self.trailing_diff = 1000
         # takerとmakerどっちになるかが分からない
         self.mfee = maker_fee*0.01
         self.tfee = taker_fee*0.01

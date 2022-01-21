@@ -2,7 +2,6 @@ from binance_f import RequestClient
 from binance_f.constant.test import *
 from binance_f.base.printobject import *
 from binance_f.model.constant import *
-from binance.client import Client
 from binance_f.exception.binanceapiexception import BinanceApiException
 
 import os
@@ -208,7 +207,7 @@ class BinanceInterface(object):
         avg_price = order_info.avgPrice
         return avg_price
 
-# TODO: バックテスト用のインターフェース
+# バックテスト用のインターフェース
 class BacktestInterface(object):
     def __init__(self, symbol,backtest_balance):
         self.symbol = symbol

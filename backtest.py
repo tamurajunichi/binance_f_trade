@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 column_name = [
     "Open Time",
@@ -33,6 +34,7 @@ class Position(object):
 
 class Backtest(object):
     def __init__(self,balance):
+        # データフレームの読み込み
         symbol = "BTCUSDT"
         candle = "1m"
         y= "2021"
@@ -40,17 +42,25 @@ class Backtest(object):
         file_dir = "future_klines/%s/%s/"%(symbol,candle)
         file_name = "%s-%s-%s-%s"%(symbol,candle,y,m)
         self.df = pd.read_csv(file_dir+file_name+".csv",names=column_name)
+        self.df = self.df[["Open Time", "Open", "High", "Low", "Close", "Volume", "Close Time"]].copy()
+
+        # 足データの位置と4tickの状態
         self.df_idx = 100
         self.tick = 0
         self.candle_tick = 0
+        self.state = None
+        self.limit = 100
 
+        # 残高と手数料
         self.balance = balance
         self.tfee = 0.04*0.01
         self.fee = 0
 
+        # 注文の格納
         self.orders = []
         self.order_count = 0
 
+        # ポジション
         self.position = Position(0.0, 0.0)
 
     @staticmethod
@@ -65,9 +75,9 @@ class Backtest(object):
 
     def post_order(self, symbol=None, ordertype="LIMIT",side=None, positionSide="BOTH", qty=0, timeInForce="GTC", price=0):
         # もらったオーダーの処理
-        o = Order(status="FILLED", orderId=self.order_count, side=side, qty=qty, price=price)
+        order = Order(status="FILLED", orderId=self.order_count, side=side, qty=qty, price=price)
         self.order_count+=1
-        self.orders.append(o)
+        self.orders.append(order)
 
         # balanceから手数料を引く
         cost = price*qty
@@ -85,25 +95,31 @@ class Backtest(object):
             self.position = Position(qty, price)
 
         # オーダーオブジェクトを返す
-        return o
+        return order
 
     def get_candlestick_data(self, symbol=None, interval=None, limit=None):
         # dfを渡す
-        df = self.df[["Open Time", "Open", "High", "Low", "Close", "Volume", "Close Time"]].copy()
         idx = self.df_idx+self.tick
-        df = df[idx-100:idx]
+        df = self.df[idx-self.limit:idx].copy()
 
         # 内部は足ごとに4tick状態を持つ
-        column = "Close"
         if self.candle_tick == 0:
-            column = "Open"
+            self.state = "Open"
         elif self.candle_tick == 1:
-            column = "High"
+            # ランダムにHighとLowを決める
+            p = np.random.rand()
+            if p < 0.5:
+                self.state = "High"
+            else:
+                self.state = "Low"
         elif self.candle_tick == 2:
-            column = "Low"
+            if self.state == "High":
+                self.state = "Low"
+            else:
+                self.state = "High"
         elif self.candle_tick == 3:
-            pass
-        df.loc[idx-1,"Close"] = df.loc[idx-1,column]
+            self.state = "Close"
+        df.loc[idx-1,"Close"] = df.loc[idx-1,self.state]
         self.position.markPrice = df.loc[idx-1,"Close"]
 
         # 足tickを1進める
@@ -118,23 +134,9 @@ class Backtest(object):
         return pos
 
     def get_symbol_price_ticker(self,symbol=None):
-        df = self.df[["Open Time", "Open", "High", "Low", "Close", "Volume", "Close Time"]].copy()
         idx = self.df_idx+self.tick
-        df = df[idx-100:idx]
-
-        # 内部は足ごとに4tick状態を持つ
-        column = "Close"
-        if self.candle_tick == 0:
-            column = "Open"
-        elif self.candle_tick == 1:
-            column = "High"
-        elif self.candle_tick == 2:
-            column = "Low"
-        elif self.candle_tick == 3:
-            pass
-        df.loc[idx-1,"Close"] = df.loc[idx-1,column]
-
-        price = df.loc[idx-1,"Close"]
+        df = self.df[idx-self.limit:idx].copy()
+        price = df.loc[idx-1,self.state]
         return price
 
     def get_balance(self):
@@ -142,9 +144,8 @@ class Backtest(object):
         return balance
 
     def get_servertime(self):
-        df = self.df[["Open Time", "Open", "High", "Low", "Close", "Volume", "Close Time"]].copy()
         idx = self.df_idx+self.tick
-        df = df[idx-100:idx]
+        df = self.df[idx-self.limit:idx].copy()
         time = self.df.loc[idx-1,"Open Time"]
         return time
 
