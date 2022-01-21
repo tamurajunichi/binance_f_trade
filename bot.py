@@ -8,7 +8,7 @@ from datetime import datetime
 from manager import Manager
 from interface import BinanceInterface, BacktestInterface
 from strategy import GoldenCross
-from log import Logger
+from logger import Logger
 
 # binance_f -> interface.py -> information -> bot.py -> signal -> manager.py -> order
 class Bot():
