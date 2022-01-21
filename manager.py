@@ -10,6 +10,7 @@ class Manager(object):
         self.longmark = 0
         self.shortmark = float('inf')
         self.trailing_line = 0
+        self.trailing_diff = 100
         # takerとmakerどっちになるかが分からない
         self.mfee = maker_fee*0.01
         self.tfee = taker_fee*0.01
@@ -203,13 +204,13 @@ class Manager(object):
             self.shortmark = float('inf')
             if self.longmark < self.mark:
                 self.longmark = self.mark
-                self.trailing_line = self.mark - 80
+                self.trailing_line = self.mark - self.trailing_diff
         elif self.pos_side == "SHORT":
             # longで使用するmarkpriceの初期化
             self.longmark = 0
             if self.shortmark > self.mark:
                 self.shortmark = self.mark
-                self.trailing_line = self.mark + 80
+                self.trailing_line = self.mark + self.trailing_diff
         else:
             pass
 
