@@ -23,7 +23,7 @@ def get_f_btcusdt(symbol, candle, ym, file_dir):
         for chunk in response.iter_content(100000):
             file.write(chunk)
         file.close()
-        print(file_name+" was downloaded.")
+        print("downloaded "+file_name+".")
         return file_name
 
 def extract_zip(file_dir, file_name):

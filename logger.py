@@ -51,7 +51,7 @@ class Logger(object):
             JST = timezone(timedelta(hours=+9), "JST")
             df['datetime'] = df["Open Time"].apply(lambda d: datetime.fromtimestamp(int(d/1000), JST))
             df=df.set_index("datetime")
-            i_plot.plot_df(df)
+            self.i_plot.plot_df(df)
 
     def initialize_log_name(self):
         # savedfで使用するログのパスを作る
@@ -78,11 +78,6 @@ class Logger(object):
             self.df.loc[self.df.index[-1], "Close"] = df.loc[df.index[-1], "Close"]
             self.df = self.df.append(df, ignore_index=False).drop_duplicates(subset="Close Time").reset_index(drop=True)
 
-# 以下はバックテストのログを見る際に使用
-def read_csv(file_path):
-    df = pd.read_csv(file_path)
-    return df
-
 def plot_df(df):
     plot = Plot(realtime=False)
     JST = timezone(timedelta(hours=+9), "JST")
@@ -92,7 +87,7 @@ def plot_df(df):
 
 def main():
     file_path = "df_log/2022-01-21_17-50-04.csv"
-    df = read_csv(file_path)
+    df = pd.read_csv(file_path)
     plot_df(df)
 
 if __name__ == "__main__":
